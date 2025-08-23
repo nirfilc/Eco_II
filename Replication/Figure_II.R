@@ -165,7 +165,7 @@ library(ggplot2)
 library(tidyr) 
 
 # --- Example usage ----------------------------------------------------------
-res <- build_figure2_from_stata_names(model_real_treatment, bins = c(-4:-1, 0:17))
+res <- build_figure2_from_stata_names(model_real_treatment, bins = c(-4:-1, 0:17), post_quarters = (0))
 res$plot
 res$data  # contains k, est, se, ci_lo, ci_hi, cum_est
 

@@ -114,6 +114,9 @@ mw[, DMW_real := MW_Real - Prev_MW_real]
 # Keep only "significant" raises: more than $0.25 higher than the previous period
 mw <- mw[is.na(Prev_MW) | DMW_real > 0.25]
 
+
+mw1 <- mw[YEAR < 2020 & YEAR > 2005]
+mw2 <- mw1[is.na(Prev_MW) | DMW_real > 0.25]
 # Define the mapping: Jurisdiction code to Province numeric code
 mw_map <- data.table(
   Jurisdiction = c("NL", "PEI", "NS", "NB", "QC", "ON", "MB", "SK", "AB", "BC"),
@@ -155,18 +158,18 @@ setkey(wage_dist, PROV)
 wage_dist[, rid := .I]
 wage_dist[, WAGEBINPROV := .GRP, by = .(PROV, WAGE_BIN)]
 
-wage_dist1 <- wage_dist
-wage_dist1[, fedincrease := 0]
+#wage_dist1 <- wage_dist
+#wage_dist1[, fedincrease := 0]
 
-wage_dist1 <- make_treatment_stacks(wage_dist1, k_start = -4, wmax = 16,
-                                    panel_id = "WAGEBINPROV",
-                                    time_var = "QTR_NUM",
-                                    state_id = "PROV",
-                                    col_wageM25 = "WAGE_MID",
-                                    col_MW_realM25 = "MW_CURRENT_real",
-                                    col_count = "QUARTER_POP")
+#wage_dist1 <- make_treatment_stacks(wage_dist1, k_start = -4, wmax = 16,
+#                                    panel_id = "WAGEBINPROV",
+ #                                   time_var = "QTR_NUM",
+  #                                  state_id = "PROV",
+   #                                 col_wageM25 = "WAGE_MID",
+    #                                col_MW_realM25 = "MW_CURRENT_real",
+     #                               col_count = "QUARTER_POP")
 
-summary(wage_dist$L4treat_p1)
+#summary(wage_dist$L4treat_p1)
 
 
 
@@ -265,13 +268,13 @@ for (kk in -4:17) {
 
 
 # main bins: m4..m1, p0..p4
-for (k in c(paste0("m", 4:1), paste0("p", 0:7))) mk_window(wage_dist1, k, "window_")
+for (k in c(paste0("m", 4:1), paste0("p", 0:7))) mk_window(wage_dist, k, "window_")
 
 # placebo right tail group 1: p5..p13
-for (k in paste0("p", 8:13)) mk_window(wage_dist1, k, "window_")
+for (k in paste0("p", 8:13)) mk_window(wage_dist, k, "window_")
 
 # placebo right tail group 2: p14..p17
-for (k in paste0("p", 14:17)) mk_window(wage_dist1, k, "window_")
+for (k in paste0("p", 14:17)) mk_window(wage_dist, k, "window_")
 
 formula_parts <- get_regression_formula_parts()
 
@@ -314,7 +317,7 @@ library(stringr)
 library(ggplot2)
 library(tidyr) 
 
-epop<- 0.57
+epop<- 1
 # --- Example usage ----------------------------------------------------------
 res <- build_figure2_from_stata_names(model_real_treatment, bins = c(-4:-1, 0:17))
 res$plot

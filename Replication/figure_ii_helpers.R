@@ -22,8 +22,8 @@ make_treatment_stacks <- function(dt,
   # --- Build _treat_pk, treat_pk, and F/L stacks for k = 8..wmax ---
   for (k in k_start:wmax) {
     # 1) `_treat_pk` at the *event quarter* (the ifclause)
-    #nm_tmp <- paste0("temptreat_", ifelse(k < 0, paste0("m", abs(k)), paste0("p", abs(k))))
-    nm_tmp  <- sprintf("temptreat_p%d", k)
+    nm_tmp <- paste0("temptreat_", ifelse(k < 0, paste0("m", abs(k)), paste0("p", abs(k))))
+    #nm_tmp  <- sprintf("temptreat_p%d", k)
     dt[, (nm_tmp) := as.integer(
       ( get("DMW_real") >  0.25 ) &
         (!is.na(get("DMW_real"))) &
@@ -35,8 +35,8 @@ make_treatment_stacks <- function(dt,
     )]
     
     # 2) `treat_pk` = current + 3 lags of `_treat_pk` within the panel
-    nm_treat <- sprintf("treat_p%d", k)
-#    nm_treat < paste0("treat_", ifelse(k < 0, paste0("m", abs(k)), paste0("p", abs(k))))
+  #  nm_treat <- sprintf("treat_p%d", k)
+    nm_treat <- paste0("treat_", ifelse(k < 0, paste0("m", abs(k)), paste0("p", abs(k))))
     dt[, (nm_treat) := 
          get(nm_tmp) +
          shift(get(nm_tmp), 1L, type = "lag") +
@@ -48,10 +48,10 @@ make_treatment_stacks <- function(dt,
     
     # 3) Leads/Lags at {4,8,12,16} quarters on `treat_pk`, NA -> 0
     for (j in c(4L, 8L, 12L, 16L)) {
-      nm_F <- sprintf("F%dtreat_p%d", j, k)
-      #nm_F  <- paste0("F", j, "treat_", ifelse(k < 0, paste0("m", abs(k)), paste0("p", abs(k))))
-      nm_L <- sprintf("L%dtreat_p%d", j, k)
-      #nm_L  <- paste0("L", j, "treat_", ifelse(k < 0, paste0("m", abs(k)), paste0("p", abs(k))))
+      #nm_F <- sprintf("F%dtreat_p%d", j, k)
+      nm_F  <- paste0("F", j, "treat_", ifelse(k < 0, paste0("m", abs(k)), paste0("p", abs(k))))
+      #nm_L <- sprintf("L%dtreat_p%d", j, k)
+      nm_L  <- paste0("L", j, "treat_", ifelse(k < 0, paste0("m", abs(k)), paste0("p", abs(k))))
       dt[, (nm_F) := shift(get(nm_treat),  j, type = "lead"), by = panel_id]
       dt[, (nm_L) := shift(get(nm_treat),  j, type = "lag"),  by = panel_id]
       dt[is.na(get(nm_F)), (nm_F) := 0L]
@@ -166,7 +166,7 @@ base_name_for_bin <- function(k) {
 terms_for_bin <- function(k, post_quarters = c(0, 4, 8, 12, 16)) {
   base <- base_name_for_bin(k)
   c(if (0 %in% post_quarters) base else NULL,
-    sprintf("L%d.%s", setdiff(post_quarters, 0), base))
+    sprintf("L%d%s", setdiff(post_quarters, 0), base))
 }
 
 # Compute L' beta and SE for a given bin k (equal weights over available post years)
