@@ -158,19 +158,19 @@ setkey(wage_dist, PROV)
 wage_dist[, rid := .I]
 wage_dist[, WAGEBINPROV := .GRP, by = .(PROV, WAGE_BIN)]
 
-#wage_dist1 <- wage_dist
-#wage_dist1[, fedincrease := 0]
+wage_dist1 <- wage_dist
+wage_dist1[, fedincrease := 0]
 
-#wage_dist1 <- make_treatment_stacks(wage_dist1, k_start = -4, wmax = 16,
-#                                    panel_id = "WAGEBINPROV",
- #                                   time_var = "QTR_NUM",
-  #                                  state_id = "PROV",
-   #                                 col_wageM25 = "WAGE_MID",
-    #                                col_MW_realM25 = "MW_CURRENT_real",
-     #                               col_count = "QUARTER_POP")
+wage_dist1 <- make_treatment_stacks(wage_dist1, k_start = -4, wmax = 16,
+                                    panel_id = "WAGEBINPROV",
+                                   time_var = "QTR_NUM",
+                                  state_id = "PROV",
+                                 col_wageM25 = "WAGE_MID",
+                                col_MW_realM25 = "MW_CURRENT_real",
+                               col_count = "QUARTER_POP")
 
-#summary(wage_dist$L4treat_p1)
-
+summary(wage_dist1$L4treat_p1)
+summary(wage_dist$L4treat_p1)
 
 
 # 3) Cross-join wage_dist × mw within province
@@ -268,13 +268,22 @@ for (kk in -4:17) {
 
 
 # main bins: m4..m1, p0..p4
+for (k in c(paste0("m", 4:1), paste0("p", 0:7))) mk_window(wage_dist1, k, "window_")
+
+# placebo right tail group 1: p5..p13
+for (k in paste0("p", 8:13)) mk_window(wage_dist1, k, "window_")
+
+# placebo right tail group 2: p14..p17
+for (k in paste0("p", 14:16)) mk_window(wage_dist1, k, "window_")
+
+# main bins: m4..m1, p0..p4
 for (k in c(paste0("m", 4:1), paste0("p", 0:7))) mk_window(wage_dist, k, "window_")
 
 # placebo right tail group 1: p5..p13
 for (k in paste0("p", 8:13)) mk_window(wage_dist, k, "window_")
 
 # placebo right tail group 2: p14..p17
-for (k in paste0("p", 14:17)) mk_window(wage_dist, k, "window_")
+for (k in paste0("p", 14:16)) mk_window(wage_dist, k, "window_")
 
 formula_parts <- get_regression_formula_parts()
 
@@ -319,7 +328,7 @@ library(tidyr)
 
 epop<- 1
 # --- Example usage ----------------------------------------------------------
-res <- build_figure2_from_stata_names(model_real_treatment, bins = c(-4:-1, 0:17))
+res <- build_figure2_from_stata_names(model_real_treatment, bins = c(-4:-1, 0:16), post_quarters = c(0, 4, 8, 12 ,16))
 res$plot
 res$data  # contains k, est, se, ci_lo, ci_hi, cum_est
 

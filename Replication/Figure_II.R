@@ -169,7 +169,12 @@ res <- build_figure2_from_stata_names(model_real_treatment, bins = c(-4:-1, 0:17
 res$plot
     res$data  # contains k, est, se, ci_lo, ci_hi, cum_est
 
+summary(final_dt$treat_p0)
+summary(final_dt$treat_m2)
+summary(final_dt$treat_p10)
 
+
+###### END FOR NOW #########
 
 # Mass over time figures
 eventmat_before <- makefigure_massovertime_before(model_before)
