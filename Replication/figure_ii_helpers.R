@@ -193,7 +193,7 @@ lincomb_bin_avg <- function(est, k, post_quarters = c(0, 4, 8, 12, 16), warn_dro
   V   <- as.matrix(vcv[idx, idx, drop = FALSE])
   
   est_val <- sum(w * b * 4 / epop)
-  se_val  <- sqrt(as.numeric(t(w) %*% V %*% w))
+  se_val  <- sqrt(as.numeric(t(w * 4 / epop) %*% V %*% (w * 4 / epop)))
   
   tibble(
     k = k, est = est_val, se = se_val,
