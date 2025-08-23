@@ -63,7 +63,9 @@ rm(dt)
                              state_id = "statenum")
  
  
-
+ # placebo right tail group 1: p5..p13
+ for (k in paste0("p", 0:7)) mk_window(final_dt, k, "window_")
+ 
  # placebo right tail group 1: p5..p13
  for (k in paste0("p", 8:13)) mk_window(final_dt, k, "window_")
  

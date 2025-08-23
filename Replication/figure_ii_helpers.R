@@ -434,9 +434,11 @@ makefigure_massovertime_after <- function(model_obj, eventmat_before, tmin = 12,
 # helper to build one window column safely (indicator = any of the post dummies is 1)
 mk_window <- function(final_dt, k, prefix = "window_") {
   post_terms <- paste0(c("", "L4", "L8", "L12", "L16"), "treat_", k)
-  have <- intersect(post_terms, names(final_dt))   # only keep columns that exist
+  
+  pre_terms <- paste0(c("F4", "F8", "F12"), "treat_", k)
   newname <- paste0(prefix, k)
   
-  final_dt[, (newname) :=  get(post_terms[1]) + get(post_terms[2]) + get(post_terms[3]) + get(post_terms[4]) + get(post_terms[5])]
+  final_dt[, (newname) :=  get(pre_terms[1]) + get(pre_terms[2]) + get(pre_terms[3]) +
+             get(post_terms[1]) + get(post_terms[2]) + get(post_terms[3]) + get(post_terms[4]) + get(post_terms[5])]
 }
 
