@@ -1,8 +1,24 @@
 # Ensure the necessary packages are loaded
 library(dplyr)
 library(haven)
+# Load required libraries
+library(fixest)
+library(data.table)
+library(ggplot2)
 
-# Assuming 'dt' and 'qcew_data' are your data frames
+setwd("C://Users//t-nirfilc//OneDrive - Microsoft//Desktop//Eco II")
+source("Eco_II//Replication//figure_ii_helpers.R")
+
+
+# Load QCEW data
+message("Loading QCEW data...")
+qcew <- read_dta(file.path(getwd(), "data/qcew_state_overall_counts_2016.dta"))
+dt <- read_dta(file.path(getwd(), "data/state_panels_with3quant1979.dta"))
+qcew_data <-read_dta(file.path(getwd(), "data/qcew_multiplier.dta"))
+qcew <- qcew %>%
+  rename(statenum = statefips) %>%
+  mutate(quarterdate = 4 * (year - 1960) + quarter - 3)  # Convert to quarterly date
+
 
 final_data <- dt %>%
   
@@ -32,103 +48,83 @@ final_data <- dt %>%
     -starts_with("black"),
     -starts_with("female"),
     -starts_with("BH"),
-    -starts_with("teen")
+    -starts_with("teen"),
+    -starts_with("white"),
+    -starts_with("gender"),
   )
 
 
+rm(dt)
+######## Create treatment vars for "placebo"
+# --- Example usage ---
+ final_dt <- make_treatment_stacks(final_data, k_start = 8, wmax = 17,
+                             panel_id = "wagebinstate",
+                             time_var = "quarterdate",
+                             state_id = "statenum")
+ 
+ 
+
+ # placebo right tail group 1: p5..p13
+ for (k in paste0("p", 8:13)) mk_window(final_dt, k, "window_")
+ 
+ # placebo right tail group 2: p14..p17
+ for (k in paste0("p", 14:17)) mk_window(final_dt, k, "window_")
+ 
+ 
+rm(final_data)
 
 
-#' Generate Regression Formula Components
-#'
-#' This function replicates the logic of the Stata `treatmentcontrolwindows`
-#' program when called with its default parameters. It returns a list
-#' containing character vectors of variable names for the regression.
-#'
-#' @return A list with the following elements:
-#'         - treatafter: Core event-study leads and lags.
-#'         - treatbefore: Variables for testing pre-trends.
-#'         - control: Control variables for state-level MW changes.
-#'         - controlf: Control variables for federal-level MW changes.
-#'         - window: Additional windowed control variables.
-#'         - fixed_effects: The two-way fixed effects.
-get_regression_formula_parts <- function() {
-  
-  # --- Set default parameters from the Stata script ---
-  Tmax <- 16
-  Tmin <- 12
-  Wmax <- 4
-  Wmin <- 4
-  
-  # --- 1. Build `$treatafter` ---
-  # These are the primary coefficients for the event study plot
-  treatafter_vars <- character(0)
-  
-  # Loop over event time (k)
-  for (k in seq(0, Tmax, by = 4)) {
-    time_prefix <- if (k == 0) "" else paste0("L", k)
-    
-    # Loop over wage bins (j)
-    bins_m <- paste0("treat_m", Wmin:1)
-    bins_p <- paste0("treat_p", 0:Wmax)
-    
-    treatafter_vars <- c(treatafter_vars, paste0(time_prefix, c(bins_m, bins_p)))
-  }
-  
-  # --- 2. Build `$treatbefore` ---
-  # These are for the pre-trend test
-  treatbefore_vars <- character(0)
-  
-  # Loop over pre-event time (k)
-  for (k in seq(-Tmin, -8, by = 4)) {
-    time_prefix <- paste0("F", -k) # Note: F for "Forward" operator
-    
-    bins_m <- paste0("treat_m", Wmin:1)
-    bins_p <- paste0("treat_p", 0:Wmax)
-    
-    treatbefore_vars <- c(treatbefore_vars, paste0(time_prefix, c(bins_m, bins_p)))
-  }
-  
-  # --- 3. Build `$control` ---
-  # Based on defaults: disagg="N", controlmethod="Absorb", contlead="Y"
-  control_vars <- c("postcont_m", "precont_m", "earlycont_m",
-                    "postcont_p", "precont_p", "earlycont_p")
-  
-  # --- 4. Build `$controlf` ---
-  # Based on defaults: contlead="Y"
-  controlf_vars <- c("postcontf_m", "precontf_m", "earlycontf_m",
-                     "postcontf_p", "precontf_p", "earlycontf_p")
-  
-  # --- 5. Build `$window` ---
-  window_bins_m <- paste0("window_m", Wmin:1)
-  window_bins_p <- paste0("window_p", 0:Wmax)
-  window_vars <- paste0("i.one#c.", c(window_bins_m, window_bins_p)) # Stata interaction syntax
-  # For R, you'd likely just use the variable names directly if they are continuous
-  # Or create the interactions manually if needed. For now, let's keep the core name.
-  simple_window_vars <- c(window_bins_m, window_bins_p)
-  
-  # --- 6. Define Fixed Effects ---
-  fixed_effects_vars <- c("wagebinstate", "wagequarterdate")
-  
-  # --- Return all parts in a named list ---
-  return(
-    list(
-      treatafter = treatafter_vars,
-      treatbefore = treatbefore_vars,
-      control = control_vars,
-      controlf = controlf_vars,
-      window = simple_window_vars,
-      fixed_effects = fixed_effects_vars
-    )
-  )
-}
+# --- inputs: change these names if your columns differ ---
+panel_id   <- "wagebinstate"   # panel for leads (same unit as Stata's xtset panel)
+time_var   <- "quarterdate"    # time index used for F. leads
+y_col      <- "overallcountpcall"
+gr_col     <- "overallcountgroup"
+fed_col    <- "fedincrease"
+year_col   <- "year.x"
+clean_col  <- "cleansample"
+weight_col <- "wtoverall1979" 
+
+setkeyv(final_dt, c(panel_id, time_var))
+
+# Leads for the next 1..4 quarters (Stata's F., F2., F3., F4.) within the panel
+final_dt[, `:=`(
+  gr_F1  = shift(get(gr_col),  1, type = "lead"),
+  gr_F2  = shift(get(gr_col),  2, type = "lead"),
+  gr_F3  = shift(get(gr_col),  3, type = "lead"),
+  gr_F4  = shift(get(gr_col),  4, type = "lead"),
+  fed_F1 = shift(get(fed_col), 1, type = "lead"),
+  fed_F2 = shift(get(fed_col), 2, type = "lead"),
+  fed_F3 = shift(get(fed_col), 3, type = "lead"),
+  fed_F4 = shift(get(fed_col), 4, type = "lead")
+), by = panel_id]
+
+# Stata's IF clause:
+# (F.gr>0 & F.gr!=. & F.fed!=1 & F.fed!=.)  OR  same for F2, F3, F4
+keep_future <-
+  (final_dt$gr_F1 > 0 & !is.na(final_dt$gr_F1) & final_dt$fed_F1 != 1 & !is.na(final_dt$fed_F1)) |
+  (final_dt$gr_F2 > 0 & !is.na(final_dt$gr_F2) & final_dt$fed_F2 != 1 & !is.na(final_dt$fed_F2)) |
+  (final_dt$gr_F3 > 0 & !is.na(final_dt$gr_F3) & final_dt$fed_F3 != 1 & !is.na(final_dt$fed_F3)) |
+  (final_dt$gr_F4 > 0 & !is.na(final_dt$gr_F4) & final_dt$fed_F4 != 1 & !is.na(final_dt$fed_F4))
+
+# Full filter: year >= 1979 & cleansample == 1 & the future-quarters condition
+ok <- keep_future & (final_dt[[year_col]] >= 1979) & (final_dt[[clean_col]] == 1)
+
+# Weighted mean of overallcountpcall (Stata's "sum ... [aw=weights]" then r(mean))
+epop <- with(final_dt[ok],
+             stats::weighted.mean(get(y_col), get(weight_col), na.rm = TRUE))
+
 
 # --- How to Use This with Your Regression ---
 # 1. Generate the list of variable names (no changes here)
 formula_parts <- get_regression_formula_parts()
+formula_parts$controlf
+
+
+
 
 # 2. Assemble the formula for the "real" treatment regression
-# THE FIX IS HERE: Remove "one" from the vector of variables.
-all_vars <- formula_parts$treatafter
+all_vars <- c(formula_parts$treatafter, formula_parts$treatbefore, formula_parts$control,
+              formula_parts$controlf, formula_parts$window)
 
 # Create the formula string
 rhs_formula <- paste(all_vars, collapse = " + ")
@@ -147,210 +143,75 @@ library(fixest)
 # This should now run without error, assuming the variables exist in final_data
 model_real_treatment <- feols(
   fml = final_formula,
-  data = final_data,
+  data = final_dt,
   weights = ~wtoverall1979,
   cluster = ~statenum
 )
 
 summary(model_real_treatment)
 
-# install.packages("broom")
-# install.packages("ggplot2")
-# install.packages("stringr") # For string manipulation
-library(broom)
-library(ggplot2)
+
+
+
+
+# Figure II from a model estimated with CDLZ-style names (treat_p#, treat_m#, L4., L8., L12., L16.)
+# est: a fixest (or lm) model; names(coef(est)) must include e.g. "treat_p0", "L4.treat_p0", ...
+library(dplyr)
+library(purrr)
 library(stringr)
+library(ggplot2)
+library(tidyr) 
 
-# --- Final Step: Aggregate Coefficients and Create Figure II ---
-
-# 1. Tidy the model output to get a clean data frame of coefficients
-model_tidy <- tidy(model_real_treatment, conf.int = TRUE)
-
-# 2. Extract the variance-covariance matrix for correct SE calculation
-vcov_matrix <- vcov(model_real_treatment)
-
-# 3. Identify the wage bins and time horizons from the coefficient names
-#    Example term: L4treat_m2 -> time=4, bin_type="m", bin_num=2
-results_df <- model_tidy %>%
-  filter(str_detect(term, "treat_")) %>% # Keep only our treatment variables
-  mutate(
-    # Extract time horizon (0 for contemporaneous, 4 for L4, etc.)
-    time = as.numeric(str_extract(term, "(?<=L)\\d+")),
-    time = ifelse(is.na(time), 0, time),
-    
-    # Extract bin type (p or m)
-    bin_type = str_extract(term, "(?<=treat_)[mp]"),
-    
-    # Extract bin number
-    bin_num = as.numeric(str_extract(term, "\\d+$")),
-    
-    # Recreate the bin identifier, like "-2" for m2 or "+1" for p1
-    wage_bin = ifelse(bin_type == "m", -bin_num, bin_num)
-  )
-
-# --- 4. Calculate the aggregate effect and standard error for each wage bin ---
-
-# The warning message from dplyr suggests using reframe() for this type of
-# complex summary, but for clarity, we can stick with summarise() and
-# ensure our logic is sound.
-
-aggregated_results <- results_df %>%
-  group_by(wage_bin) %>%
-  # The summarise block calculates the main point estimate and its standard error
-  summarise(
-    avg_effect = sum(estimate),
-    
-    # Get the coefficient names for the current group to subset the vcov matrix
-    terms_in_group = list(term),
-    vcov_subset = list(vcov(model_real_treatment)[terms_in_group[[1]], terms_in_group[[1]]]),
-    
-    # The variance of the sum is the sum of all elements in this vcov sub-matrix
-    var_of_sum = sum(vcov_subset[[1]]),
-    
-    # SE of the sum = sqrt of its variance. SE of the average = SE of sum / N
-    se_of_avg = sqrt(var_of_sum) / n(),
-    
-    .groups = 'drop' # Ungroup after summarising
-  ) %>%
-  
-  # --- THE FIX IS HERE ---
-  # First, arrange the data frame by wage_bin.
-  # This is critical for the cumulative sum to be calculated in the correct order.
-  arrange(wage_bin) %>%
-  
-  # Now, use mutate() to add the confidence intervals and the cumulative sum.
-  mutate(
-    conf.low = avg_effect - 1.96 * se_of_avg,
-    conf.high = avg_effect + 1.96 * se_of_avg,
-    cumulative_effect = cumsum(avg_effect) # This now works on the sorted data
-  )
-
-# Check the first few rows of the final aggregated data frame
-print(head(aggregated_results))
+# --- Example usage ----------------------------------------------------------
+res <- build_figure2_from_stata_names(model_real_treatment, bins = c(-4:-1, 0:17))
+res$plot
+res$data  # contains k, est, se, ci_lo, ci_hi, cum_est
 
 
-# --- 5. Generate the final plot (Figure II) ---
 
-# We need to manually set the x-axis labels to match the paper's style
-x_axis_labels <- setNames(
-  paste0("$", aggregated_results$wage_bin), # Labels like "$ -4", "$0", "$4"
-  aggregated_results$wage_bin             # Positions on the axis
-)
-# Add the "+"" for the highest bin if it exists (e.g., bin 4 becomes "$4+")
-if (max(aggregated_results$wage_bin) == 4) {
-  x_axis_labels[as.character(max(aggregated_results$wage_bin))] <- "$4+"
-}
+# Mass over time figures
+eventmat_before <- makefigure_massovertime_before(model_before)
+figure_massovertime <- makefigure_massovertime_after(model_after, eventmat_before)
+graphexportpdf(figure_massovertime, file.path(figures_path, "Figure3.pdf"))
 
 
-figure_II_plot <- ggplot(aggregated_results, aes(x = factor(wage_bin))) +
-  
-  # Blue bars for the average effect in each bin
-  geom_col(aes(y = avg_effect), fill = "#56B4E9", alpha = 0.8) +
-  
-  # Error bars for the 95% confidence interval
-  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.3, color = "#0072B2") +
-  
-  # Red dashed line for the running sum of employment changes
-  # We need to use aes(group = 1) to tell ggplot to draw a single line across all x-axis points
-  geom_line(aes(y = cumulative_effect, group = 1), color = "#D55E00", linetype = "dashed", size = 1) +
-  
-  # Add a horizontal line at y=0 for reference
-  geom_hline(yintercept = 0, color = "black", linetype = "solid") +
-  
-  # Formatting to match the academic style of the paper
-  scale_x_discrete(labels = x_axis_labels) +
+# est is your fitted model (fixest::feols)
+ct <- as.data.frame(summary(model_real_treatment)$coeftable)
+ct$term <- rownames(ct)
+ct <- ct[, c("term", "Estimate", "Std. Error", "t value", "Pr(>|t|)")]
+write.csv(ct, "coefficients.csv", row.names = FALSE)
+getw
+
+
+
+fig_df <- map_dfr(bins, ~lincomb_bin_avg(model_real_treatment, .x, post_quarters = post_quarters)) %>%
+  arrange(k) %>%
+  mutate(cum_est = cumsum(replace_na(model_real_treatment, 0)))
+
+# Plot
+p <- ggplot(fig_df, aes(x = k, y = model_real_treatment)) +
+  geom_col(width = 0.9, fill = "#2E86D1") +
+  geom_errorbar(aes(ymin = ci_lo, ymax = ci_hi), width = 0.2, color = "#1B4F72") +
+  geom_line(aes(y = cum_est, group = 1), linetype = "dashed", size = 0.9, color = "#C0392B") +
+  geom_point(aes(y = cum_est), color = "#C0392B", size = 1.3) +
   labs(
-    title = "Impact of Minimum Wages on the Wage Distribution",
-    subtitle = "Event Study Estimates of Employment Changes by Wage Bin",
-    x = "Wage Bins in $ Relative to New Minimum Wage",
-    y = "Change in Employment Share"
+    x = "Wage bin relative to the new minimum (k)",
+    y = "Avg. employment change, post years τ ∈ {0..4}",
+    title   = "Figure II (CDLZ naming): bin-level five-year averages",
+    subtitle= "Bars: per-bin average of {treat_•, L4., L8., L12., L16.}; dashed: running cumulative sum"
   ) +
-  theme_minimal(base_size = 14) +
-  theme(
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor.y = element_blank(),
-    plot.title = element_text(hjust = 0.5),
-    plot.subtitle = element_text(hjust = 0.5, face = "italic")
-  )
+  theme_minimal(base_size = length(bins))
 
-# Display the plot
-print(figure_II_plot)
-
-# --- Final Step: Aggregate and Scale Coefficients (Corrected to Average) ---
-
-# NOTE: You must calculate the correct 'E' normalization factor from your data.
-E_normalization_factor <- 0.02 # Placeholder value
-
-# 1. Tidy model output and get VCV matrix (no change)
-model_tidy <- tidy(model_real_treatment, conf.int = TRUE)
-vcov_matrix <- vcov(model_real_treatment)
-
-# 2. Extract bin and time info (no change)
-results_df <- model_tidy %>%
-  filter(str_detect(term, "treat_")) %>%
-  mutate(
-    time = as.numeric(str_extract(term, "(?<=L)\\d+")),
-    time = ifelse(is.na(time), 0, time),
-    bin_type = str_extract(term, "(?<=treat_)[mp]"),
-    bin_num = as.numeric(str_extract(term, "\\d+$")),
-    wage_bin = ifelse(bin_type == "m", -bin_num, bin_num)
-  )
-
-# --- 3. Calculate the Final Average Effect and Its Standard Error ---
-aggregated_results_final <- results_df %>%
-  group_by(wage_bin) %>%
-  summarise(
-    # --- THIS IS THE FIX ---
-    # We create the linear combination of coefficients for the average effect.
-    # The combination is (1/5)*coef_t0 + (1/5)*coef_t4 + ...
-    # The scaling factors are applied to the whole combination.
-    
-    # Get the names of the coefficients in the current group
-    terms_in_group = list(term),
-    
-    # Calculate the average effect using the 'lincom' logic from Stata
-    # Sum the estimates, then multiply by the denominator (0.2) and scaling factors
-    avg_effect = (sum(estimate) * 0.2) * 4 * (1 / E_normalization_factor),
-    
-    # --- Calculate the Standard Error of this combination ---
-    # Create a vector of weights for the linear combination (0.2 for each term)
-    comb_weights = rep(0.2, n()),
-    
-    # Subset the variance-covariance matrix
-    vcov_subset = vcov_matrix[terms_in_group[[1]], terms_in_group[[1]]],
-    
-    # Calculate the variance of the linear combination: w' * V * w
-    # And then apply the scaling factors to the standard error
-    se_of_avg = sqrt(t(comb_weights) %*% vcov_subset %*% comb_weights) * 4 * (1 / E_normalization_factor),
-    
-    .groups = 'drop'
-  ) %>%
-  arrange(wage_bin) %>%
-  mutate(
-    conf.low = avg_effect - 1.96 * se_of_avg,
-    conf.high = avg_effect + 1.96 * se_of_avg,
-    cumulative_effect = cumsum(avg_effect)
-  )
-
-# --- 4. Generate the Plot ---
-# The plotting code is the same, just ensure it uses `avg_effect` from this final data frame.
-# (Plotting code omitted for brevity, it remains unchanged from the previous correct version)
+list(data = fig_df, plot = p)
 
 
-# --- 5. Generate the Final Plot ---
-# (The plotting code remains the same as before, but uses this new data frame)
 
-figure_II_final_plot <- ggplot(aggregated_results_final, aes(x = factor(wage_bin))) +
-  geom_col(aes(y = avg_effect), fill = "#56B4E9", alpha = 0.8) +
-  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.3, color = "#0072B2") +
-  geom_line(aes(y = cumulative_effect, group = 1), color = "#D55E00", linetype = "dashed", size = 1) +
-  geom_hline(yintercept = 0) +
-  labs(
-    title = "Impact of Minimum Wages on the Wage Distribution",
-    subtitle = "Average 5-Year Employment Changes by Wage Bin",
-    x = "Wage Bins in $ Relative to New Minimum Wage",
-    y = "Change in Employment Share"
-  ) +
-  theme_minimal(base_size = 14)
 
-print(figure_II_final_plot)
+need <- unlist(lapply(8:16, function(k)
+  c(sprintf("treat_p%d", k),
+    sprintf("L4treat_p%d", k),  sprintf("L8treat_p%d", k),
+    sprintf("L12treat_p%d", k), sprintf("L16treat_p%d", k),
+    sprintf("F8treat_p%d", k),  sprintf("F12treat_p%d", k))
+))
+colSums(final_dt[, need, with = FALSE] != 0, na.rm = TRUE)
+
